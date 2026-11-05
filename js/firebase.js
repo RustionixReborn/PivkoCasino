@@ -38,6 +38,15 @@ const FB = {
   async deleteUser(nick) {
     await this.del('users/' + encodeURIComponent(nick));
   },
+  /* добавить баланс юзеру (read-modify-write — прибавляет к текущему значению) */
+  async addBalance(nick, amount) {
+    if (!nick || !amount || amount <= 0) throw new Error('Нужен ник и положительная сумма');
+    const path = 'users/' + encodeURIComponent(nick);
+    const cur = (await this.get(path)) || {};
+    const newBal = (cur.balance || 0) + amount;
+    await this.set(path, Object.assign({}, cur, { balance: newBal, savedAt: new Date().toISOString() }));
+    return newBal;
+  },
 
   /* Вход по «пивному кодовому слову»: ищем в users нick с таким key.
      Возвращает { nick, data } или null, если слова нет. */
