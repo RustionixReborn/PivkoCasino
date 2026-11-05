@@ -178,27 +178,34 @@
     try { users = await FB.listUsers(); }
     catch (e) { lbBody.innerHTML = '<div class="hint" style="color:var(--danger)">Не удалось загрузить: ' + e.message + '</div>'; return; }
 
-    // фильтр: исключаем тех, кто скрыл себя (hidden), но всегда показываем текущего игрока
-    const me = PC.user;
+    // фильтр: скрывшие себя (hidden:true) НЕ попадают в список вообще — ни себе, ни другим
+    const isMeHidden = PC.loggedIn && !!PC.state.hidden;
     const list = Object.keys(users)
       .map(nick => ({ nick, bal: (users[nick] && users[nick].balance) || 0, hidden: !!(users[nick] && users[nick].hidden) }))
-      .filter(u => !u.hidden || u.nick === me)
+      .filter(u => !u.hidden)
       .sort((a, b) => b.bal - a.bal)
       .slice(0, 20);
 
     lbBody.innerHTML = '';
-    if (!list.length) { lbBody.innerHTML = '<div class="lb-empty">Никого нет. Первый пивной магнат — ты!</div>'; return; }
+    if (isMeHidden) {
+      const note = document.createElement('div');
+      note.className = 'hint';
+      note.style.cssText = 'color:var(--gold);font-weight:700;padding:10px;margin-bottom:8px';
+      note.innerHTML = '🕶️ Ты скрыт — тебя нет в лидерборде. Отключи в настройках, чтобы снова светиться.';
+      lbBody.appendChild(note);
+    }
+    if (!list.length) { lbBody.innerHTML += '<div class="lb-empty">Никого нет. Первый пивной магнат — ты!</div>'; return; }
 
     const l = document.createElement('div');
     l.className = 'lb-list';
     const medals = ['🥇', '🥈', '🥉'];
     list.forEach((u, i) => {
       const row = document.createElement('div');
-      row.className = 'lb-row' + (i < 3 ? ' top' + (i + 1) : '') + (u.nick === me ? ' lb-me' : '');
+      row.className = 'lb-row' + (i < 3 ? ' top' + (i + 1) : '') + (u.nick === PC.user ? ' lb-me' : '');
       row.style.animationDelay = (i * 0.04) + 's';
       row.innerHTML = `
         <span class="lb-place">${medals[i] || (i + 1)}</span>
-        <span class="lb-nick">${u.nick}${u.nick === me ? ' (ты)' : ''}</span>
+        <span class="lb-nick">${u.nick}${u.nick === PC.user ? ' (ты)' : ''}</span>
         <span class="lb-bal">${PC.fmt(u.bal)}</span>
       `;
       l.appendChild(row);
@@ -239,7 +246,14 @@
       </div>
     `;
     const h = stBody.querySelector('#setHidden');
-    h.onchange = () => { PC.state.hidden = h.checked; PC.save(); PC.toast(h.checked ? '🕶️ Ты скрыт в лидерборде' : '🧍 Ты снова виден в лидерборде', 'good'); };
+    h.onchange = () => {
+      PC.state.hidden = h.checked;
+      // немедленно пишем отдельный параметр hidden в Firebase
+      PC.save();
+      PC.toast(h.checked ? '🕶️ Ты скрыт в лидерборде' : '🧍 Ты снова виден в лидерборде', 'good');
+      // если лидерборд открыт — перерисовать сразу, чтобы изменения были видны
+      if (lbOverlay.classList.contains('open')) renderLeaderboard();
+    };
     const s = stBody.querySelector('#setSound');
     s.onchange = () => {
       PC.state.sound = s.checked;
