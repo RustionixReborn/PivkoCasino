@@ -268,6 +268,11 @@ button,a,.card,.reel,.tile,img{transition:transform .35s var(--ease), box-shadow
 .admin-row .a-nick{font-weight:800;min-width:90px}
 .admin-row .a-key{color:var(--muted);font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .admin-row .a-del{margin-left:auto}
+.admin-add{display:flex;gap:4px;align-items:center}
+.admin-add .a-add-in{width:70px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);
+  background:rgba(13,6,24,.8);color:var(--text);font-family:inherit;font-size:13px;outline:none;text-align:center}
+.admin-add .a-add-in:focus{border-color:var(--purple)}
+.admin-add .a-add-btn{padding:6px 10px;font-size:14px}
 .admin-form{display:flex;flex-direction:column;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .admin-form input{padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:rgba(13,6,24,.8);
   color:var(--text);font-family:inherit;font-size:14px;outline:none}
