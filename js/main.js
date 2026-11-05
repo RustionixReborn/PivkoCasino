@@ -378,6 +378,7 @@
     adminBtn.style.display = (u.nick === 'admin') ? 'inline-block' : 'none';
     document.getElementById('soundBtn').textContent = PC.state.sound ? '🔊' : '🔇';
     PC.refreshUI();
+    startSync(); // запускаем живое обновление из RTDB
     PC.toast('🍻 Добро пожаловать, ' + u.nick + '! Твой счёт: ' + PC.fmt(PC.state.balance), 'gold');
   }
   loginBtn.onclick = () => { doLogin(true); };
@@ -387,6 +388,7 @@
   logoutBtn.onclick = () => {
     try { localStorage.removeItem(KEY_MEM); } catch (e) {}
     PC.logout();
+    stopSync(); // останавливаем синхронизацию при выходе
     logoutBtn.style.display = 'none';
     adminBtn.style.display = 'none';
     lbBtn.style.display = 'none';
@@ -396,6 +398,31 @@
     showLogin();
     PC.toast('🚪 Вышел из аккаунта. Хмельного вечера!', '');
   };
+
+  /* ---------- ЖИВАЯ СИНХРОНИЗАЦИЯ С RTDB (каждые 10 сек) ---------- */
+  let syncTimer = null;
+  function startSync() {
+    if (syncTimer) clearInterval(syncTimer);
+    syncTimer = setInterval(async () => {
+      if (!PC.loggedIn) return;
+      try {
+        const fresh = await FB.get('users/' + encodeURIComponent(PC.user));
+        if (fresh) {
+          const oldBal = PC.state.balance;
+          PC.applyUser({ nick: PC.user, data: fresh });
+          // если админ добавил денег — показать пользователю
+          if (fresh.balance > oldBal) {
+            PC.toast('💸 Тебе начислили ' + PC.fmt(fresh.balance - oldBal), 'gold');
+          }
+          // если открыт лидерборд — обновить
+          if (lbOverlay.classList.contains('open')) renderLeaderboard();
+        }
+      } catch (e) { /* тихо — переподключится на след. тике */ }
+    }, 10000);
+  }
+  function stopSync() {
+    if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+  }
 
   /* ---------- АДМИНКА (управление юзерами; доступна admin) ---------- */
   const adminBtn = document.getElementById('adminBtn');
@@ -423,8 +450,25 @@
       row.innerHTML = `
         <span class="a-nick">${nick}</span>
         <span class="a-key">🔑 ${u.key || 'нет'}</span>
-        <span style="font-weight:700;color:var(--gold);font-size:13px">${PC.fmt(u.balance || 0)}</span>
+        <span class="a-bal" style="font-weight:700;color:var(--gold);font-size:13px">${PC.fmt(u.balance || 0)}</span>
       `;
+      // поле + кнопка «добавить денег»
+      const addWrap = document.createElement('div');
+      addWrap.className = 'admin-add';
+      addWrap.innerHTML = `
+        <input type="number" class="a-add-in" min="1" placeholder="+₽" title="Сколько добавить">
+        <button class="game-btn btn-gold a-add-btn" title="Добавить денег">➕</button>
+      `;
+      addWrap.querySelector('.a-add-btn').onclick = async () => {
+        const amt = parseInt(addWrap.querySelector('.a-add-in').value, 10);
+        if (!amt || amt <= 0) { PC.toast('Введи сумму для добавления.', 'bad'); return; }
+        try {
+          await FB.addBalance(nick, amt);
+          PC.toast('💸 ' + nick + ' +' + PC.fmt(amt), 'gold');
+          renderAdmin();
+        } catch (e) { PC.toast('Ошибка: ' + e.message, 'bad'); }
+      };
+      row.appendChild(addWrap);
       const del = document.createElement('button');
       del.className = 'game-btn btn-danger a-del';
       del.style.padding = '6px 10px'; del.style.fontSize = '13px';
