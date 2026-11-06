@@ -22,7 +22,7 @@ const app = initializeApp(firebaseConfig);
 
 // --- App Check (Enforced): ReCaptcha Enterprise провайдер ---
 const appCheck = initializeAppCheck(app, {
-  provider: new ReCaptchaEnterpriseProvider('6Ld4UhMuAAAAAP1xSrQDgQzVJ7FKeEnj2aV88wPV'),
+  provider: new ReCaptchaEnterpriseProvider('6Ld4UhMuAAAAAPIxSrQDgQzVJ7FKeEnj2aV88wPV'),
   isTokenAutoRefreshEnabled: true
 });
 console.log('App Check initialized (ReCaptchaEnterprise)');
