@@ -441,6 +441,29 @@
     const head = document.createElement('div');
     head.innerHTML = '<div class="hint" style="margin-bottom:4px">Всего юзеров: <b>' + Object.keys(users).length + '</b></div>';
     adminBody.appendChild(head);
+
+    // управление тех. перерывом (узел maintenance на корне базы)
+    const maintRow = document.createElement('div');
+    maintRow.className = 'set-row';
+    maintRow.style.marginBottom = '14px';
+    let maint = false;
+    try { maint = await FB.getMaintenance(); } catch (e) {}
+    maintRow.innerHTML = `
+      <div><div class="s-label">🚧 Тех. перерыв (maintenance)</div>
+      <div class="s-desc">Включишь — все увидят заглушку, сайт закроется</div></div>
+      <label class="switch">
+        <input type="checkbox" id="adMaint" ${maint ? 'checked' : ''}>
+        <span class="track"></span><span class="knob"></span>
+      </label>
+    `;
+    maintRow.querySelector('#adMaint').onchange = async (e) => {
+      try {
+        await FB.setMaintenance(e.target.checked);
+        PC.toast(e.target.checked ? '🚧 Кабак закрыт на тех. перерыв' : '🍻 Кабак снова открыт', 'gold');
+      } catch (err) { PC.toast('Ошибка: ' + err.message, 'bad'); }
+    };
+    adminBody.appendChild(maintRow);
+
     const list = document.createElement('div');
     list.className = 'admin-list';
     Object.keys(users).forEach(nick => {
@@ -507,8 +530,66 @@
     };
   }
 
+  /* ---------- ТЕХ. ПЕРЕРЫВ (maintenance: узел на корне базы, рядом с users) ---------- */
+  const maintPage = document.getElementById('maintPage');
+  let maintActive = false;
+  let maintTimer = null;
+
+  function showMaint() {
+    maintActive = true;
+    maintPage.classList.remove('hidden');
+    // декор: падающие банки добавляем В BODY (не в grid-контейнер — иначе выстроятся колонкой!)
+    if (!document.body.dataset.maintDecor) {
+      document.body.dataset.maintDecor = '1';
+      const COUNT = 10;
+      for (let i = 0; i < COUNT; i++) {
+        const d = document.createElement('div');
+        d.className = 'maint-beer';
+        d.textContent = ['🍺', '🍻', '💧'][i % 3];
+        // равномерно разносим по ширине
+        d.style.left = (4 + (92 / COUNT) * i + Math.random() * 4) + '%';
+        // равномерно разносим по времени: отрицательная задержка сразу даёт разную фазу
+        const dur = 9 + Math.random() * 6;
+        d.style.animationDuration = dur + 's';
+        d.style.animationDelay = -(dur / COUNT) * i + 's';
+        d.style.fontSize = (20 + Math.random() * 16) + 'px';
+        document.body.appendChild(d);
+      }
+    }
+    document.body.style.overflow = 'hidden';
+  }
+  function hideMaint() {
+    maintActive = false;
+    maintPage.classList.add('hidden');
+    document.body.style.overflow = '';
+    // убрать декор, чтобы не летал на основном сайте
+    document.body.dataset.maintDecor = '';
+    document.querySelectorAll('.maint-beer').forEach(e => e.remove());
+  }
+
+  // проверка режима каждые 10 сек: true — не пускаем, false — впускаем
+  async function checkMaint() {
+    try {
+      const on = await FB.getMaintenance();
+      if (on && !maintActive) {
+        showMaint();
+        document.querySelectorAll('.modal-overlay').forEach(o => o.classList.remove('open'));
+        PC.toast('🚧 Кабак закрылся на тех. перерыв!', 'bad');
+      } else if (!on && maintActive) {
+        hideMaint();
+        PC.toast('🍻 Кабак снова открыт! Заходи!', 'gold');
+      }
+    } catch (e) { /* сеть недоступна — не мешаем */ }
+  }
+
   async function boot() {
-    // сперва — экран входа
+    // сперва проверяем тех. перерыв — если кабак закрыт, дальше не идём
+    await checkMaint();
+    // опрашиваем каждые 10 сек независимо (и при закрытом кабаке, и при открытом)
+    maintTimer = setInterval(checkMaint, 10000);
+    if (maintActive) return; // на заглушке — сайт закрыт
+
+    // кабак открыт — экран входа
     showLogin();
     // авто-вход: если есть запомненный ключ — пробуем войти молча
     let savedKey = null;
