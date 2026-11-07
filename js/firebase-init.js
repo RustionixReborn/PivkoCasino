@@ -24,18 +24,39 @@ const db = getDatabase(app);
 
 // --- Firebase Auth (анонимная сессия): даёт auth.uid для правил безопасности ---
 const auth = getAuth(app);
-// анонимный вход при старте, чтобы у каждого посетителя был uid
-signInAnonymously(auth).catch(e => console.warn('Anonymous auth failed:', e));
+
+// повторяем анонимный вход, пока не получим currentUser (или не исчерпаем попытки)
+async function ensureAnonymous() {
+  if (auth.currentUser) return auth.currentUser;
+  for (let i = 0; i < 4; i++) {
+    try {
+      const cred = await signInAnonymously(auth);
+      if (cred && cred.user) return cred.user;
+    } catch (e) {
+      console.warn('Anonymous attempt ' + (i + 1) + ' failed:', e.code || e.message);
+    }
+    await new Promise(r => setTimeout(r, 500));
+  }
+  return null;
+}
+// стартуем сразу, не блокируя инициализацию
+ensureAnonymous().then(u => {
+  console.log(u
+    ? 'Anonymous auth OK, uid=' + u.uid
+    : '!!! Anonymous auth FAILED — правила auth!=null будут резать все запросы (проверь, что Anonymous включён в Authentication).');
+});
 
 window.FIREBASE = { app: app, db: db, auth: auth,
   // дождаться анонимной авторизации и вернуть готовую auth-сессию
   ensureAuth: async function () {
     if (auth.currentUser) return auth.currentUser;
+    const u = await ensureAnonymous();
+    // небольшая дождалка на случай гонки
     const deadline = Date.now() + 8000;
     while (!auth.currentUser && Date.now() < deadline) {
       await new Promise(r => setTimeout(r, 50));
     }
-    return auth.currentUser || null;
+    return auth.currentUser || u || null;
   },
   // вернуть Firebase ID-токен текущего юзера (для REST ?auth=)
   getIdToken: async function () {
