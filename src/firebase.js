@@ -1,87 +1,63 @@
-/* ============ FIREBASE REALTIME DATABASE (REST) ============ */
-/* Подключение к RTDB через REST API — работает и на GitHub Pages, и локально,
-   без Firebase SDK. Всё хранится под ключом users/<никнейм>. */
-const FB = {
-  URL: 'https://pivkozeta-default-rtdb.firebaseio.com/',
+/* ============ FIREBASE: initializeApp + Auth (email/password) + Realtime Database ============ */
+/* Модульный (ESM) вариант через CDN — работает на GitHub Pages без сборщика.
+   Авторизация — по логину(email)+паролю. auth.uid = ключ записи users/<auth.uid>,
+   поэтому правила auth.uid == $uid работают и на чтение, и на запись (игры пишут баланс). */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-  /* Заголовок App Check (Enforced): токен берём из firebase-init.js, если он есть. */
-  async _acHeaders(extra) {
-    const h = Object.assign({}, extra);
-    try {
-      const tok = window.FIREBASE && window.FIREBASE.getToken
-        ? await window.FIREBASE.getToken() : null;
-      if (tok) h['X-Firebase-AppCheck'] = tok;
-    } catch (_) { /* App Check недоступен — шлём без токена */ }
-    return h;
-  },
+const firebaseConfig = {
+  apiKey: 'AIzaSyBlCJlOQ7YPaKWWAA7HUJOueMS7Q_0M7cQ',
+  authDomain: 'pivkozeta.firebaseapp.com',
+  databaseURL: 'https://pivkozeta-default-rtdb.firebaseio.com',
+  projectId: 'pivkozeta',
+  storageBucket: 'pivkozeta.firebasestorage.app',
+  messagingSenderId: '769892443386',
+  appId: '1:769892443386:web:ed284ef988649556d31543',
+};
 
-  async get(path) {
-    const r = await fetch(this.URL + path + '.json', {
-      headers: await this._acHeaders(),
-    });
-    if (!r.ok) throw new Error('DB GET ' + r.status);
-    return r.json();
-  },
-  async set(path, val) {
-    const r = await fetch(this.URL + path + '.json', {
-      method: 'PUT',
-      headers: await this._acHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(val),
-    });
-    if (!r.ok) throw new Error('DB PUT ' + r.status);
-    return r.json();
-  },
-  async del(path) {
-    const r = await fetch(this.URL + path + '.json', {
-      method: 'DELETE',
-      headers: await this._acHeaders(),
-    });
-    if (!r.ok) throw new Error('DB DELETE ' + r.status);
-  },
-  async listUsers() {
-    return (await this.get('users')) || {};
-  },
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-  /* Режим тех. перерыва: узел maintenance на КОРНЕ базы, рядом с users */
-  async getMaintenance() {
-    const v = await this.get('maintenance');
-    return v === true;
-  },
-  async setMaintenance(flag) {
-    await this.set('maintenance', !!flag);
-  },
-  async createUser(nick, key, balance = 1000) {
-    if (!nick || !key) throw new Error('Нужны ник и ключ');
-    await this.set('users/' + encodeURIComponent(nick), {
-      key: key,
-      balance: balance,
-      gains: 0, games: 0, maxWin: 0, luck: 0, sound: true, hidden: false,
-      savedAt: new Date().toISOString(),
-    });
-  },
-  async deleteUser(nick) {
-    await this.del('users/' + encodeURIComponent(nick));
-  },
-  /* добавить баланс юзеру (read-modify-write — прибавляет к текущему значению) */
-  async addBalance(nick, amount) {
-    if (!nick || !amount || amount <= 0) throw new Error('Нужен ник и положительная сумма');
-    const path = 'users/' + encodeURIComponent(nick);
-    const cur = (await this.get(path)) || {};
-    const newBal = (cur.balance || 0) + amount;
-    await this.set(path, Object.assign({}, cur, { balance: newBal, savedAt: new Date().toISOString() }));
-    return newBal;
+// --- Firebase Auth (email/password) ---
+const auth = getAuth(app);
+// Firebase сохраняет сессию в localStorage по умолчанию → автовход при перезагрузке работает сам
+
+// нормализация логина: "boris" -> "boris@pivko.local", полный email остаётся
+function toEmail(login) {
+  const s = (login || '').trim();
+  if (!s) return '';
+  return s.includes('@') ? s : s + '@pivko.local';
+}
+
+window.FIREBASE = {
+  app: app, db: db, auth: auth,
+
+  // текущий авторизованный юзер (может быть null)
+  current: function () { return auth.currentUser; },
+
+  // войти по логину+паролю; возвращает { uid, email } или бросает ошибку
+  signIn: async function (login, password) {
+    const email = toEmail(login);
+    if (!email || !password) throw new Error('Введи логин и пароль');
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    const u = cred.user;
+    return { uid: u.uid, email: u.email };
   },
 
-  /* Вход по «пивному кодовому слову»: ищем в users нick с таким key.
-     Возвращает { nick, data } или null, если слова нет. */
-  async login(key) {
-    const users = (await this.get('users')) || {};
-    for (const nick in users) {
-      if (users[nick] && users[nick].key === key) {
-        return { nick, data: users[nick] };
-      }
-    }
-    return null;
+  // вернуть Firebase ID-токен текущего юзера (для REST ?auth=)
+  getIdToken: async function () {
+    const u = auth.currentUser;
+    if (!u) return null;
+    try { return await u.getIdToken(); } catch (e) { return null; }
+  },
+
+  signOutAuth: async function () {
+    try { await signOut(auth); } catch (e) {}
+  },
+
+  // подписка на смену состояния авторизации (для автовхода/выхода)
+  onAuthChange: function (cb) {
+    return onAuthStateChanged(auth, cb);
   },
 };
-window.FB = FB; // экспорт в глобальную область (в т.ч. после eval в бандле)
