@@ -4,52 +4,48 @@
 const FB = {
   URL: 'https://pivkozeta-default-rtdb.firebaseio.com/',
 
-  /* Заголовок App Check (Enforced): токен берём из firebase-init.js, если он есть.
-     Важно: firebase-init.js — это <script type="module">, он выполняется ПОЗЖЕ обычных
-     скриптов. Поэтому здесь ждём готовности модуля (до ~4 сек), иначе первый запрос
-     уйдёт без токена и получит 401 "Missing appcheck token". */
-  /* Полный набор заголовков: App Check + (опц.) Firebase ID-токен для auth. */
-  /* Заголовки запроса: Firebase auth ID-токен (для правил auth != null).
-     App Check убран — на проекте pivkozeta он не настроен. */
-  async _headers(extra) {
-    const h = Object.assign({}, extra);
-    // недолго ждём, пока модуль firebase-init.js инициализировал window.FIREBASE
-    const deadline = Date.now() + 4000;
-    while (typeof window.FIREBASE === 'undefined' && Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, 50));
-    }
-    // Firebase auth ID-токен — чтобы правила видели auth != null / auth.uid
-    try {
-      const idt = window.FIREBASE && window.FIREBASE.getIdToken ? await window.FIREBASE.getIdToken() : null;
-      if (idt) h['Authorization'] = 'Bearer ' + idt;
-    } catch (_) {}
-    return h;
+  /* Realtime Database REST понимает авторизацию ТОЛЬКО через параметр ?auth=<токен>.
+     Здесь ?auth= заполняется Firebase ID-токеном (для правил auth != null / auth.uid). */
+  _waitFb() {
+    return new Promise((resolve) => {
+      const deadline = Date.now() + 5000;
+      (function tick() {
+        if (typeof window.FIREBASE !== 'undefined') return resolve(true);
+        if (Date.now() > deadline) return resolve(false);
+        setTimeout(tick, 50);
+      })();
+    });
   },
-
-  /* списal вариант для старых вызовов (оставлено для совместимости) */
-  async _acHeaders(extra) {
-    return this._headers(extra);
+  async _authToken() {
+    try {
+      if (typeof window.FIREBASE === 'undefined') { await this._waitFb(); }
+      if (window.FIREBASE && window.FIREBASE.getIdToken) {
+        return await window.FIREBASE.getIdToken();
+      }
+    } catch (_) {}
+    return null;
+  },
+  async _url(path) {
+    const tok = await this._authToken();
+    return this.URL + path + '.json' + (tok ? '?auth=' + encodeURIComponent(tok) : '');
   },
 
   async get(path) {
-    const r = await fetch(this.URL + path + '.json', { headers: await this._headers() });
+    const r = await fetch(await this._url(path));
     if (!r.ok) throw new Error('DB GET ' + r.status);
     return r.json();
   },
   async set(path, val) {
-    const r = await fetch(this.URL + path + '.json', {
+    const r = await fetch(await this._url(path), {
       method: 'PUT',
-      headers: await this._headers({ 'Content-Type': 'application/json' }),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(val),
     });
     if (!r.ok) throw new Error('DB PUT ' + r.status);
     return r.json();
   },
   async del(path) {
-    const r = await fetch(this.URL + path + '.json', {
-      method: 'DELETE',
-      headers: await this._headers(),
-    });
+    const r = await fetch(await this._url(path), { method: 'DELETE' });
     if (!r.ok) throw new Error('DB DELETE ' + r.status);
   },
   async listUsers() {
