@@ -110,7 +110,16 @@ const FB = {
     }
     // продублировать в витрину лидерборда
     await this.upsertLeaderboard(uid, data).catch(() => {});
-    return { nick: data.nick, data, uid, isNew: isNew, banned: !!data.banned, banReason: data.banReason || '' };
+    // бан читаем из ОТДЕЛЬНОГО закрытого узла bans/<uid> (юзер его не может менять)
+    let ban = { banned: false, banReason: '' };
+    try { const b = await this.get('bans/' + encodeURIComponent(uid)); if (b && b.banned) { ban.banned = true; ban.banReason = b.banReason || ''; } } catch (_) {}
+    return { nick: data.nick, data, uid, isNew: isNew, banned: ban.banned, banReason: ban.banReason };
+  },
+
+  /* бан-статус юзера (только чтение; писать может лишь админка через god-ключ) */
+  async getBan(uid) {
+    try { const b = await this.get('bans/' + encodeURIComponent(uid)); if (b && b.banned) return { banned: true, reason: b.banReason || '' }; } catch (_) {}
+    return { banned: false, reason: '' };
   },
 
   /* публичная витрина для лидерборда: leaderboard/<uid> */
