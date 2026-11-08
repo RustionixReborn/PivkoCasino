@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍺 PivkoTavern — Играй и хмелей</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Фоновые пузырьки -->
+<canvas id="bubbles" aria-hidden="true"></canvas>
+<div class="ambient-glow" aria-hidden="true"></div>
+
+<!-- Всплывающие тосты -->
+<div id="toast-wrap" aria-live="polite"></div>
+
+<!-- Анимация "поймал пузырёк" -->
+<div id="bubble-pop" aria-hidden="true"></div>
+
+<!-- Плавающие банки (декор) -->
+<div class="floaties" aria-hidden="true">
+  <div class="floater" style="left:6%; top:18%; animation-delay:0s;">🍺</div>
+  <div class="floater" style="left:88%; top:25%; animation-delay:1.6s;">🍻</div>
+  <div class="floater" style="left:14%; top:78%; animation-delay:2.6s;">💧</div>
+  <div class="floater" style="left:80%; top:70%; animation-delay:.9s;">🍺</div>
+  <div class="floater" style="left:45%; top:8%; animation-delay:2.1s;">🍻</div>
+</div>
+
+<!-- ШАПКА -->
+<header class="site-header" id="site-header">
+  <div class="logo-holder">
+    <div class="logo-badge">🍺</div>
+    <div>
+      <h1 class="logo-title">PIVKO <span>TAVERN</span></h1>
+      <p class="logo-sub">Играй. Выигрывай. Хмелей с честью.</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="whoami" id="whoAmI">гость</span>
+    <div class="chips-pill">
+      <span class="chip-icon">💰</span>
+      <span id="balance">0 ₽</span>
+    </div>
+    <button id="leaderboardBtn" class="icon-btn" title="Лидерборд" style="display:none">🏆</button>
+    <button id="friendsBtn" class="icon-btn" title="Друзья" style="display:none">🤝</button>
+    <button id="settingsBtn" class="icon-btn" title="Настройки" style="display:none">⚙️</button>
+    <button id="logoutBtn" class="icon-btn" title="Выйти из аккаунта" style="display:none">🚪</button>
+    <button id="soundBtn" class="icon-btn" title="Звук">🔊</button>
+  </div>
+</header>
+
+<!-- ЭКРАН ВХОДА (по uid игрока; админка отдельно) -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-card">
+    <div class="login-icon">🍺</div>
+    <h2>Таверна пивка</h2>
+    <p class="login-desc" id="loginDesc">Введи логин и пароль, чтобы открыть столик.</p>
+    <input type="text" id="loginUid" class="login-input" placeholder="Логин" autocomplete="username" autocapitalize="off" spellcheck="false">
+    <input type="password" id="loginPin" class="login-input" placeholder="Пароль" autocomplete="current-password" style="margin-top:10px">
+    <button class="btn btn-primary login-btn" id="loginBtn">🔓 Войти</button>
+    <p class="login-error" id="loginError"></p>
+  </div>
+</div>
+
+<!-- ПРИВЕТСТВИЕ -->
+<section class="hero">
+  <div class="hero-badge">🍻 Добро пожаловать в самое хмельное заведение интернета!</div>
+  <h2 class="hero-title">Прокачай пузо <span class="grad">и кошелёк</span></h2>
+  <p class="hero-sub">5 игр. Реальные рубли (нет). Очень честная таверна (нет). Только здесь почти всегда выигрывает заведение — но вдруг повезёт?</p>
+  <div class="hero-actions">
+    <button class="btn btn-primary" id="welcomeBtn">🎁 Забрать стартовое пиво</button>
+    <button class="btn btn-ghost" id="scrollGames">🎮 К играм</button>
+  </div>
+  <div class="hero-beer">🍺</div>
+  <div class="hero-bubbles"></div>
+</section>
+
+<!-- СЧЕТЧИКИ -->
+<section class="stats">
+  <div class="stat"><span class="stat-ico">🍺</span><span id="statGains" class="stat-num">0 ₽</span><span class="stat-lbl">выиграно</span></div>
+  <div class="stat"><span class="stat-ico">💵</span><span class="stat-num" id="statGames">0</span><span class="stat-lbl">сыграно</span></div>
+  <div class="stat"><span class="stat-ico">🍻</span><span class="stat-num" id="statMax">0 ₽</span><span class="stat-lbl">макс. выигрыш</span></div>
+  <div class="stat"><span class="stat-ico">📈</span><span class="stat-num" id="statLuck">0%</span><span class="stat-lbl">удачи</span></div>
+</section>
+
+<!-- СЕТКА ИГР -->
+<main class="games-grid" id="gamesGrid"></main>
+
+<!-- ПОДВАЛ -->
+<footer class="site-footer">
+  <div class="joke-ticker"><span class="ticker-icon">💬</span><div class="ticker-track" id="ticker"></div></div>
+  <p class="footer-note">Все выигрыши виртуальны. Вся хмель тоже. 18+ (в смысле, лучше пить ответственно). Сделано с любовью и дрожжами. 🍺</p>
+</footer>
+
+<!-- МОДАЛКА ИГРЫ -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-head">
+      <h3 class="modal-title" id="modalTitle">Игра</h3>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div class="modal-game" id="modalGame"><!-- сюда рендер: экран ставки и сама игра --></div>
+  </div>
+</div>
+
+<!-- АДМИНКА убрана с публичного сайта — отдельный локальный интерфейс позже -->
+
+<!-- ЛИДЕРБОРД -->
+<div class="modal-overlay" id="lbOverlay">
+  <div class="modal" style="width:min(560px,94vw)">
+    <div class="modal-head">
+      <h3 class="modal-title">🏆 Лидерборд</h3>
+      <button class="modal-close" id="lbClose">✕</button>
+    </div>
+    <div class="hint" style="margin-bottom:12px">Пивные магнаты с самым толстым кошельком</div>
+    <div id="lbBody"></div>
+  </div>
+</div>
+
+<!-- НАСТРОЙКИ -->
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal" style="width:min(440px,94vw)">
+    <div class="modal-head">
+      <h3 class="modal-title">⚙️ Настройки</h3>
+      <button class="modal-close" id="settingsClose">✕</button>
+    </div>
+    <div id="settingsBody"></div>
+  </div>
+</div>
+
+<!-- ДРУЗЬЯ -->
+<div class="modal-overlay" id="friendsOverlay">
+  <div class="modal" style="width:min(520px,94vw)">
+    <div class="modal-head">
+      <h3 class="modal-title">🤝 Друзья</h3>
+      <button class="modal-close" id="friendsClose">✕</button>
+    </div>
+    <div class="fr-tabs">
+      <button class="fr-tab" data-fr="out">✉️ Исходящие</button>
+      <button class="fr-tab" data-fr="in">📥 Входящие</button>
+      <button class="fr-tab" data-fr="list">👥 Друзья</button>
+    </div>
+    <div id="friendsBody"></div>
+  </div>
+</div>
+
+<!-- ТЕХ. ПЕРЕРЫВ (maintenance) -->
+<div class="maint-page hidden" id="maintPage">
+  <div class="maint-card">
+    <div class="maint-mug">🍺</div>
+    <h2 class="maint-title">Кабак на тех. перерыве</h2>
+    <p class="maint-text">Краны прочищаем, пену взбиваем.<br><b>Следите за новостями!</b></p>
+    <div class="maint-hint">Проверяем каждые 10 секунд — если кабак откроется, вы попадёте внутрь автоматически.</div>
+  </div>
+</div>
+
+<div class="version-tag" id="versionTag">v1.12.0</div>
+
+<!-- Firebase (модульный SDK) — инициализация + Auth/DB -->
+<script type="module" src="js/firebase-init.js"></script>
+<script src="js/core.js"></script>
+<script src="js/firebase.js"></script>
+<script src="js/games/018-mine.js"></script>
+<script src="js/games/017-golf.js"></script>
+<script src="js/games/021-plinko.js"></script>
+<script src="js/games/004-pour.js"></script>
+<script src="js/games/011-drum.js"></script>
+<script src="js/games/022-crash.js"></script>
+<script src="js/games/023-battle.js"></script>
+<script src="js/games/024-upgrader.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
