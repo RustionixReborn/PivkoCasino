@@ -110,7 +110,7 @@ const FB = {
     }
     // продублировать в витрину лидерборда
     await this.upsertLeaderboard(uid, data).catch(() => {});
-    return { nick: data.nick, data, uid, isNew: isNew };
+    return { nick: data.nick, data, uid, isNew: isNew, banned: !!data.banned, banReason: data.banReason || '' };
   },
 
   /* публичная витрина для лидерборда: leaderboard/<uid> */
