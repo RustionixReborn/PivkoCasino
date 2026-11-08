@@ -155,6 +155,8 @@ const PC = window.PC = (() => {
       for (const k of ['balance','gains','games','maxWin','luck','sound','hidden']) {
         if (typeof d[k] === 'number' || typeof d[k] === 'boolean') state[k] = d[k];
       }
+      // последний ПОДТВЕРЖДЁННЫЙ сервером баланс — для слияния при сохранении
+      PC._syncBal = typeof d.balance === 'number' ? d.balance : state.balance;
       PC.renderStats();
       PC.refreshUI();
     },
@@ -175,9 +177,27 @@ const PC = window.PC = (() => {
     // записать всю статистику текущего пользователя: приватно users/<uid> + витрина leaderboard/<uid>
     async save() {
       if (!PC.loggedIn || !PC.uid) return;
+      // ===== СЛИЯНИЕ БАЛАНСА: не затираем начисления админки устаревшим локальным значением =====
+      // Клиент держит state.balance; админка пишет users/<uid>/balance напрямую.
+      // Если игрок сохранит ВЕСЬ объект со своим старым балансом — он перезатрёт деньги админа.
+      // Поэтому: берём дельту игрока с последнего синка и применяем её к АКТУАЛЬНОМУ серверному балансу.
+      let bal = state.balance;
+      const delta = (typeof PC._syncBal === 'number') ? (state.balance - PC._syncBal) : 0;
+      if (delta !== 0) {
+        try {
+          const cur = await FB.get('users/' + encodeURIComponent(PC.uid));
+          const serverBal = (cur && typeof cur.balance === 'number') ? cur.balance : PC._syncBal;
+          bal = serverBal + delta;
+          state.balance = bal;
+          PC._syncBal = bal;
+          PC.refreshUI();
+        } catch (_) { bal = state.balance; }
+      } else {
+        PC._syncBal = bal;
+      }
       const snapshot = {
         nick: PC.user || 'гость',
-        balance: state.balance,
+        balance: bal,
         gains: state.gains,
         games: state.games,
         maxWin: state.maxWin,
