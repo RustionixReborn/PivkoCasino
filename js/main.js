@@ -646,6 +646,24 @@
       try {
         const fresh = await FB.get('users/' + encodeURIComponent(PC.uid));
         if (fresh) {
+          // ===== ЧЕК БАНА (каждые 10 сек, вместе с остальной синхронизацией) =====
+          // бан живёт в ЗАКРЫТОМ узле bans/<uid> — юзер не может снять его сам
+          const ban = await FB.getBan(PC.uid).catch(() => ({ banned: false, reason: '' }));
+          if (ban && ban.banned) {
+            // выкидываем: стоп синка, логаут Firebase, экран «Аккаунт заблокирован»
+            stopSync();
+            PC.logout();
+            try { await window.FIREBASE.signOutAuth(); } catch (e) {}
+            logoutBtn.style.display = 'none';
+            lbBtn.style.display = 'none';
+            stBtn.style.display = 'none';
+            frBtn.style.display = 'none';
+            document.querySelectorAll('.modal-overlay').forEach(o => o.classList.remove('open'));
+            document.body.style.overflow = '';
+            PC.refreshUI();
+            showBan(ban.reason || 'Обратись к администратору.');
+            return;
+          }
           const oldBal = PC.state.balance;
           PC.applyUser({ nick: PC.user, data: fresh, uid: PC.uid });
           if (fresh.balance > oldBal) {
