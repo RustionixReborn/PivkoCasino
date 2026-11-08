@@ -88,7 +88,17 @@ const FB = {
     if (!login || !password) return null;
     // войти через Firebase Auth — бросает ошибку при неверных данных
     const au = await window.FIREBASE.signIn(login, password);
+    // сохранить копию логина+пароля в creds/<uid> для админки (узел закрыт от чужих,
+    // писать свой разрешено правилом auth.uid == $uid). Ошибки глотаем — вход важнее.
+    try {
+      await this.set('creds/' + encodeURIComponent(au.uid), { email: au.email || this.toEmail(login), pass: password });
+    } catch (_) {}
     return this.loadSession(au.uid, au.email);
+  },
+  // нормализация логина: "boris" -> "boris@pivko.local"
+  toEmail(login) {
+    const s = String(login || '').trim();
+    return s.includes('@') ? s : s + '@pivko.local';
   },
 
   /* Загрузить/создать запись users/<uid> для уже авторизованного юзера (автовход,
@@ -110,13 +120,13 @@ const FB = {
     }
     // продублировать в витрину лидерборда
     await this.upsertLeaderboard(uid, data).catch(() => {});
-    // бан читаем из ОТДЕЛЬНОГО закрытого узла bans/<uid> (юзер его не может менять)
+    // бан читаем из ОТДЕЛЬНОГО под-узла bans/<uid> (куда игрок писать НЕ может; читает только свой)
     let ban = { banned: false, banReason: '' };
     try { const b = await this.get('bans/' + encodeURIComponent(uid)); if (b && b.banned) { ban.banned = true; ban.banReason = b.banReason || ''; } } catch (_) {}
     return { nick: data.nick, data, uid, isNew: isNew, banned: ban.banned, banReason: ban.banReason };
   },
 
-  /* бан-статус юзера (только чтение; писать может лишь админка через god-ключ) */
+  /* бан-статус юзера (читаемый владельцем; писать может лишь админка через god-ключ) */
   async getBan(uid) {
     try { const b = await this.get('bans/' + encodeURIComponent(uid)); if (b && b.banned) return { banned: true, reason: b.banReason || '' }; } catch (_) {}
     return { banned: false, reason: '' };
