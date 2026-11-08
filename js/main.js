@@ -543,6 +543,31 @@
     document.body.style.overflow = '';
   }
 
+  // показать экран «Аккаунт заблокирован» с причиной
+  function showBan(reason) {
+    // спрятать экран входа, показать бан-экран
+    loginOverlay.classList.add('hidden');
+    const banOv = document.getElementById('banOverlay');
+    const reasonEl = document.getElementById('banReasonText');
+    if (reasonEl) reasonEl.textContent = reason ? 'Причина: ' + reason : '';
+    if (banOv) banOv.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    // выход с бан-экрана → снова экран логина
+    const exitBtn = document.getElementById('banExit');
+    if (exitBtn) {
+      exitBtn.onclick = () => {
+        if (banOv) banOv.classList.add('hidden');
+        loginOverlay.classList.remove('hidden');
+        document.body.style.overflow = '';
+      };
+    }
+  }
+  // спрятать бан-экран (при успешном входе)
+  function hideBan() {
+    const banOv = document.getElementById('banOverlay');
+    if (banOv) banOv.classList.add('hidden');
+  }
+
   // вход по логину+паролю
   async function doLogin(manual) {
     const login = loginUid.value.trim();
@@ -554,6 +579,12 @@
       const u = await FB.login(login, pass);
       if (!u) {
         if (manual) { loginError.textContent = 'Неверный логин или пароль.'; loginBtn.disabled = false; }
+        return false;
+      }
+      // забанен — не пускаем, показываем бан-экран
+      if (u.banned) {
+        if (manual) { loginBtn.disabled = false; }
+        showBan(u.banReason || 'Обратись к администратору.');
         return false;
       }
       // тизер при первом входе
@@ -580,6 +611,7 @@
   function enterSession(u) {
     PC.applyUser(u);
     hideLogin();
+    hideBan();
     logoutBtn.style.display = 'inline-block';
     lbBtn.style.display = 'inline-block';
     stBtn.style.display = 'inline-block';
@@ -717,7 +749,10 @@
       loginError.textContent = 'Входим автоматически...';
       try {
         const u = await FB.loadSession(cur.uid, cur.email);
-        if (u) { enterSession(u); return; }
+        if (u) {
+          if (u.banned) { showBan(u.banReason || 'Обратись к администратору.'); return; }
+          enterSession(u); return;
+        }
       } catch (e) { console.warn('auto-login failed', e); }
       loginError.textContent = 'Не удалось войти автоматически — введи логин и пароль.';
     } else {
